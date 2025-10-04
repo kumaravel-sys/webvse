@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Virtual Stock Trainer</title>
+<style>
+body { font-family:sans-serif; margin:0; padding:0; background:#f5f7fb; }
+header { background:#0f1724; color:white; padding:12px 20px; display:flex; justify-content:space-between; align-items:center; }
+header h1 { margin:0; font-size:18px; }
+.container { padding:20px; max-width:1100px; margin:24px auto; background:white; border-radius:10px; box-shadow:0 6px 20px rgba(10,20,40,0.06); }
+.hidden { display:none; }
+input, button { padding:10px; border-radius:6px; border:1px solid #cbd5e1; font-size:14px; }
+button { cursor:pointer; background:#0f1724; color:white; border:none; }
+.search-suggestions { background:#fff; border:1px solid #e2e8f0; max-height:200px; overflow:auto; border-radius:6px; margin-top:6px; }
+.suggest-item { padding:8px; cursor:pointer; border-bottom:1px solid #f1f5f9; }
+.suggest-item:hover { background:#f8fafc; }
+table { width:100%; border-collapse:collapse; margin-top:12px; }
+th,td { padding:8px; border-bottom:1px solid #f1f5f9; text-align:left; }
+.card { padding:12px; border-radius:8px; background:#fff; box-shadow:0 4px 10px rgba(15,23,42,0.04); margin-top:12px; }
+.small { font-size:13px; color:#475569; }
+footer { text-align:center; padding:16px; color:#475569; font-size:13px; }
+</style>
+</head>
+<body>
+
+<header>
+<h1>Virtual Stock Trainer</h1>
+</header>
+
+<main class="container">
+
+<!-- COMMON PASSWORD -->
+<section id="view-common">
+<h2>Enter Common Password</h2>
+<input type="password" id="common-password" placeholder="Common Password">
+<button id="btn-common">Next</button>
+<div id="common-msg" class="small"></div>
+</section>
+
+<!-- LOGIN/SIGNUP -->
+<section id="view-login" class="hidden">
+<h2>Login / Signup</h2>
+<p class="small">Admin: admin6@vse.com / adminvse2k25</p>
+<input id="email" type="email" placeholder="Email"><br><br>
+<input id="password" type="password" placeholder="Password"><br><br>
+<button id="btn-login">Login / Signup</button>
+<button id="btn-guest">Guest</button>
+<div id="login-msg" class="small"></div>
+</section>
+
+<!-- DASHBOARD -->
+<section id="view-dashboard" class="hidden">
+<h2>Dashboard</h2>
+<div style="display:flex; gap:20px;">
+<div style="flex:1;">
+<input id="search-input" placeholder="Search Indian company (e.g., Tata)">
+<div id="suggestions" class="search-suggestions hidden"></div>
+<button id="btn-search">Search</button>
+
+<div id="stock-panel" class="card hidden">
+<h3 id="stock-name">Select a company</h3>
+<div id="tv-wrap" style="height:420px;"></div>
+<div style="margin-top:8px;">
+Qty: <input type="number" id="qty" value="1" min="1" style="width:80px;">
+<button id="btn-buy">Buy</button>
+<button id="btn-sell" style="background:#ef4444;">Sell</button>
+</div>
+</div>
+
+<div class="card">
+<h3>Portfolio</h3>
+<div class="small">Balance: <b id="balance">-</b></div>
+<table id="portfolio-table">
+<thead><tr><th>Symbol</th><th>Qty</th><th>Avg Price</th><th>Curr Price</th><th>Value</th></tr></thead>
+<tbody></tbody>
+</table>
+</div>
+</div>
+
+<div style="width:320px;">
+<div class="card">
+<h3>User Info</h3>
+<div class="small">Email: <span id="user-email"></span></div>
+<button id="btn-logout" style="background:#ef4444;margin-top:8px;">Logout</button>
+</div>
+
+<div id="admin-card" class="card hidden">
+<h3>Admin Panel</h3>
+<button id="btn-open-admin">Show Leaderboard</button>
+<table id="admin-table">
+<thead><tr><th>#</th><th>Email</th><th>Balance</th><th>Holdings</th><th>Total</th><th>Profit</th></tr></thead>
+<tbody></tbody>
+</table>
+</div>
+</div>
+</div>
+</section>
+
+<footer>Virtual trades only — powered by TradingView & Finnhub</footer>
+
+<script src="https://s3.tradingview.com/tv.js"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+import { getFirestore, doc, setDoc, getDoc, collection, getDocs, updateDoc } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+
+/* ---------------- FIREBASE CONFIG ---------------- */
+const firebaseConfig = {
+  apiKey: "AIzaSyCSge0yGXLBAR-hSo9Z4JPsPvcOPhilj8c",
+  authDomain: "vseweb-73d5d.firebaseapp.com",
+  projectId: "vseweb-73d5d",
+  storageBucket: "vseweb-73d5d.firebasestorage.app",
+  messagingSenderId: "537511528277",
+  appId: "1:537511528277:web:434ede9ba7d63e2ded91dc"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const FINNHUB_API = "d3bm7n1r01qqg7bv706gd3bm7n"; 
+const ADMIN_EMAIL = "admin6@vse.com";
+const ADMIN_PASSWORD = "adminvse2k25";
+
+/* ---------------- UI ELEMENTS ---------------- */
+const viewCommon = document.getElementById('view-common');
+const viewLogin = document.getElementById('view-login');
+const viewDashboard = document.getElementById('view-dashboard');
+
+const btnCommon = document.getElementById('btn-common');
+const commonPwdEl = document.getElementById('common-password');
+const commonMsg = document.getElementById('common-msg');
+
+const emailEl = document.getElementById('email');
+const pwdEl = document.getElementById('password');
+const btnLogin = document.getElementById('btn-login');
+const btnGuest = document.getElementById('btn-guest');
+const loginMsg = document.getElementById('login-msg');
+
+const userEmailEl = document.getElementById('user-email');
+const balanceEl = document.getElementById('balance');
+const portfolioTableBody = document.querySelector('#portfolio-table tbody');
+
+const searchInput = document.getElementById('search-input');
+const suggestionsBox = document.getElementById('suggestions');
+const btnSearch = document.getElementById('btn-search');
+const stockPanel = document.getElementById('stock-panel');
+const stockNameEl = document.getElementById('stock-name');
+const tvWrap = document.getElementById('tv-wrap');
+const qtyEl = document.getElementById('qty');
+const btnBuy = document.getElementById('btn-buy');
+const btnSell = document.getElementById('btn-sell');
+
+const btnLogout = document.getElementById('btn-logout');
+const adminCard = document.getElementById('admin-card');
+const btnOpenAdmin = document.getElementById('btn-open-admin');
+const adminTableBody = document.querySelector('#admin-table tbody');
+
+/* ---------------- STATE ---------------- */
+let currentUser = null;
+let currentUserDoc = null;
+let selectedCompany = null;
+
+/* ---------------- HELPERS ---------------- */
+function show(view){
+  viewCommon.classList.add('hidden');
+  viewLogin.classList.add('hidden');
+  viewDashboard.classList.add('hidden');
+  view.classList.remove('hidden');
+}
+function money(x){ return '₹'+Number(x).toLocaleString('en-IN', {maximumFractionDigits:2}); }
+
+async function ensureUserDoc(uid,email){
+  const ref = doc(db,'users',uid);
+  const snap = await getDoc(ref);
+  if(!snap.exists()){
+    await setDoc(ref,{email,balance:50000,portfolio:{},trades:[],createdAt:Date.now()});
+  }
+}
+
+/* ---------------- COMMON PASSWORD ---------------- */
+btnCommon.onclick = ()=>{
+  if(commonPwdEl.value === 'vse2k25'){
+    show(viewLogin);
+  }else{
+    commonMsg.textContent = "Incorrect password";
+  }
+}
+
+/* ---------------- LOGIN/SIGNUP ---------------- */
+btnLogin.onclick = async ()=>{
+  const email = emailEl.value.trim();
+  const pwd = pwdEl.value.trim();
+  if(!email||!pwd){ loginMsg.textContent="Enter email & password"; return; }
+  loginMsg.textContent="Working...";
+  try{
+    const cred = await signInWithEmailAndPassword(auth,email,pwd);
+    await ensureUserDoc(cred.user.uid,email);
+  }catch(err){
+    if(err.code==='auth/user-not-found'){
+      try{ await createUserWithEmailAndPassword(auth,email,pwd); await ensureUserDoc(auth.currentUser.uid,email); }
+      catch(e){ loginMsg.textContent=e.message; return; }
+    }else{ loginMsg.textContent=err.message; return; }
+  }
+};
+
+/* ---------------- AUTH STATE ---------------- */
+onAuthStateChanged(auth, async (user)=>{
+  if(user){
+    currentUser = user;
+    await ensureUserDoc(user.uid,user.email);
+    const snap = await getDoc(doc(db,'users',user.uid));
+    currentUserDoc = snap.data();
+    userEmailEl.textContent = user.email;
+    balanceEl.textContent = money(currentUserDoc.balance);
+    if(user.email===ADMIN_EMAIL) adminCard.classList.remove('hidden');
+    show(viewDashboard);
+  }else{
+    show(viewLogin);
+  }
+});
+
+/* ---------------- LOGOUT ---------------- */
+btnLogout.onclick = async ()=>{
+  await signOut(auth);
+  currentUser=null;
+  currentUserDoc=null;
+  show(viewLogin);
+});
+</script>
+</body>
+</html>
+
